@@ -3,6 +3,7 @@
 
 #![doc = include_str!("../README.md")]
 
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use thiserror::Error;
 use wasmtime::component::types::{ComponentFunc, ComponentItem};
@@ -10,7 +11,7 @@ use wasmtime::component::{Component, Type, Val};
 use wasmtime::Engine;
 
 /// Function identifier for tools, containing WIT package, WIT interface, and function names.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FunctionIdentifier {
     pub package_name: Option<String>,
     pub interface_name: Option<String>,

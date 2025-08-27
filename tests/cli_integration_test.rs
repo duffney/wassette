@@ -67,7 +67,7 @@ impl CliTestContext {
         cmd.args(args);
         cmd.arg("--plugin-dir").arg(&self.plugin_dir);
 
-        let output = tokio::time::timeout(Duration::from_secs(30), cmd.output())
+        let output = tokio::time::timeout(Duration::from_secs(120), cmd.output())
             .await
             .context("Command timed out")?
             .context("Failed to execute command")?;

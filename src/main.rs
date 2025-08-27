@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
@@ -192,6 +193,7 @@ const BIND_ADDRESS: &str = "127.0.0.1:9001";
 #[derive(Clone)]
 pub struct McpServer {
     lifecycle_manager: LifecycleManager,
+    peer: Arc<Mutex<Option<rmcp::Peer<rmcp::RoleServer>>>>,
 }
 
 /// Handle CLI tool commands by creating appropriate tool call requests
@@ -276,7 +278,23 @@ impl McpServer {
     /// # Arguments
     /// * `lifecycle_manager` - The lifecycle manager for handling component operations
     pub fn new(lifecycle_manager: LifecycleManager) -> Self {
-        Self { lifecycle_manager }
+        Self {
+            lifecycle_manager,
+            peer: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Store the peer for background notifications (called on first request)
+    fn store_peer_if_empty(&self, peer: rmcp::Peer<rmcp::RoleServer>) {
+        let mut peer_guard = self.peer.lock().unwrap();
+        if peer_guard.is_none() {
+            *peer_guard = Some(peer);
+        }
+    }
+
+    /// Get a clone of the stored peer if available
+    pub fn get_peer(&self) -> Option<rmcp::Peer<rmcp::RoleServer>> {
+        self.peer.lock().unwrap().clone()
     }
 }
 
@@ -313,6 +331,9 @@ Key points:
     ) -> Pin<Box<dyn Future<Output = Result<CallToolResult, ErrorData>> + Send + 'a>> {
         let peer_clone = ctx.peer.clone();
 
+        // Store peer on first request
+        self.store_peer_if_empty(peer_clone.clone());
+
         Box::pin(async move {
             let result = handle_tools_call(params, &self.lifecycle_manager, peer_clone).await;
             match result {
@@ -327,8 +348,11 @@ Key points:
     fn list_tools<'a>(
         &'a self,
         _params: Option<PaginatedRequestParam>,
-        _ctx: RequestContext<RoleServer>,
+        ctx: RequestContext<RoleServer>,
     ) -> Pin<Box<dyn Future<Output = Result<ListToolsResult, ErrorData>> + Send + 'a>> {
+        // Store peer on first request
+        self.store_peer_if_empty(ctx.peer.clone());
+
         Box::pin(async move {
             let result = handle_tools_list(&self.lifecycle_manager).await;
             match result {
@@ -343,8 +367,11 @@ Key points:
     fn list_prompts<'a>(
         &'a self,
         _params: Option<PaginatedRequestParam>,
-        _ctx: RequestContext<RoleServer>,
+        ctx: RequestContext<RoleServer>,
     ) -> Pin<Box<dyn Future<Output = Result<ListPromptsResult, ErrorData>> + Send + 'a>> {
+        // Store peer on first request
+        self.store_peer_if_empty(ctx.peer.clone());
+
         Box::pin(async move {
             let result = handle_prompts_list(serde_json::Value::Null).await;
             match result {
@@ -359,8 +386,11 @@ Key points:
     fn list_resources<'a>(
         &'a self,
         _params: Option<PaginatedRequestParam>,
-        _ctx: RequestContext<RoleServer>,
+        ctx: RequestContext<RoleServer>,
     ) -> Pin<Box<dyn Future<Output = Result<ListResourcesResult, ErrorData>> + Send + 'a>> {
+        // Store peer on first request
+        self.store_peer_if_empty(ctx.peer.clone());
+
         Box::pin(async move {
             let result = handle_resources_list(serde_json::Value::Null).await;
             match result {
@@ -466,14 +496,41 @@ async fn main() -> Result<()> {
                 let config =
                     config::Config::from_serve(cfg).context("Failed to load configuration")?;
 
-                let lifecycle_manager =
-                    LifecycleManager::new_with_env(&config.plugin_dir, config.environment_vars)
-                        .await?;
+                // Create unloaded lifecycle manager for fast startup
+                let lifecycle_manager = LifecycleManager::new_unloaded_with_env(
+                    &config.plugin_dir,
+                    config.environment_vars,
+                )
+                .await?;
 
-                let server = McpServer::new(lifecycle_manager);
+                let server = McpServer::new(lifecycle_manager.clone());
+
+                // Start background component loading
+                let server_clone = server.clone();
+                let lifecycle_manager_clone = lifecycle_manager.clone();
+                tokio::spawn(async move {
+                    let notify_fn = move || {
+                        // Notify clients when a new component is loaded (if peer is available)
+                        if let Some(peer) = server_clone.get_peer() {
+                            let peer_clone = peer.clone();
+                            tokio::spawn(async move {
+                                if let Err(e) = peer_clone.notify_tool_list_changed().await {
+                                    tracing::warn!("Failed to notify tool list changed: {}", e);
+                                }
+                            });
+                        }
+                    };
+
+                    if let Err(e) = lifecycle_manager_clone
+                        .load_existing_components_async(None, Some(notify_fn))
+                        .await
+                    {
+                        tracing::error!("Background component loading failed: {}", e);
+                    }
+                });
 
                 if use_stdio_transport {
-                    tracing::info!("Starting MCP server with stdio transport");
+                    tracing::info!("Starting MCP server with stdio transport. Components will load in the background.");
                     let transport = stdio_transport();
                     let running_service = serve_server(server, transport).await?;
 
@@ -481,7 +538,7 @@ async fn main() -> Result<()> {
                     let _ = running_service.cancel().await;
                 } else if use_streamable_http {
                     tracing::info!(
-                        "Starting MCP server on {} with streamable HTTP transport",
+                        "Starting MCP server on {} with streamable HTTP transport. Components will load in the background.",
                         BIND_ADDRESS
                     );
                     let service = StreamableHttpService::new(
@@ -497,7 +554,7 @@ async fn main() -> Result<()> {
                         .await;
                 } else {
                     tracing::info!(
-                        "Starting MCP server on {} with SSE HTTP transport",
+                        "Starting MCP server on {} with SSE HTTP transport. Components will load in the background.",
                         BIND_ADDRESS
                     );
                     let ct = SseServer::serve(BIND_ADDRESS.parse().unwrap())
