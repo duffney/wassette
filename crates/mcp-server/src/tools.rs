@@ -16,6 +16,9 @@ use crate::components::{
     handle_load_component, handle_unload_component,
 };
 
+/// The list of components that Wassette knows about
+const COMPONENT_LIST: &str = include_str!("../../../component-registry.json");
+
 /// Handles a request to list available tools.
 #[instrument(skip(lifecycle_manager))]
 pub async fn handle_tools_list(lifecycle_manager: &LifecycleManager) -> Result<Value> {
@@ -65,6 +68,7 @@ pub async fn handle_tools_call(
         "revoke-environment-variable-permission" => {
             handle_revoke_environment_variable_permission(&req, lifecycle_manager).await
         }
+        "search-components" => handle_search_component(&req, lifecycle_manager).await,
         "reset-permission" => handle_reset_permission(&req, lifecycle_manager).await,
         _ => handle_component_call(&req, lifecycle_manager).await,
     };
@@ -386,7 +390,63 @@ fn get_builtin_tools() -> Vec<Tool> {
             output_schema: None,
             annotations: None,
         },
+        Tool {
+            name: Cow::Borrowed("search-components"),
+            description: Some(Cow::Borrowed(
+                "Lists all known components that can be fetched and loaded",
+            )),
+            input_schema: Arc::new(
+                serde_json::from_value(json!({
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }))
+                .unwrap_or_default(),
+            ),
+            output_schema: Some(Arc::new(
+                serde_json::from_value(json!({
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "The human-readable name of the component"
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "Describes what the component does"
+                        },
+                        "uri": {
+                            "type": "string",
+                            "description": "The canonical OCI URI, including the leading `oci://` and `:version` suffix. This string can be directly passed to Wassette's `load component` tool call."
+                        },
+                    },
+                    "required": ["name", "description", "uri"]
+                }))
+                .unwrap_or_default(),
+            )),
+            annotations: None,
+        },
     ]
+}
+
+#[instrument(skip(_lifecycle_manager))]
+async fn handle_search_component(
+    _req: &CallToolRequestParam,
+    _lifecycle_manager: &LifecycleManager,
+) -> Result<CallToolResult> {
+    let components_value: Value = serde_json::from_str(COMPONENT_LIST)?;
+    let status_text = serde_json::to_string(&json!({
+        "status": "Component list found",
+        "components": components_value,
+    }))?;
+
+    let contents = vec![Content::text(status_text)];
+
+    Ok(CallToolResult {
+        content: Some(contents),
+        structured_content: None,
+        is_error: None,
+    })
 }
 
 #[instrument(skip(lifecycle_manager))]
@@ -858,7 +918,7 @@ mod tests {
     #[test]
     fn test_get_builtin_tools() {
         let tools = get_builtin_tools();
-        assert_eq!(tools.len(), 11);
+        assert_eq!(tools.len(), 12);
         assert!(tools.iter().any(|t| t.name == "load-component"));
         assert!(tools.iter().any(|t| t.name == "unload-component"));
         assert!(tools.iter().any(|t| t.name == "list-components"));
@@ -874,6 +934,7 @@ mod tests {
             .iter()
             .any(|t| t.name == "revoke-environment-variable-permission"));
         assert!(tools.iter().any(|t| t.name == "reset-permission"));
+        assert!(tools.iter().any(|t| t.name == "search-components"));
     }
 
     #[tokio::test]
