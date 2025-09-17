@@ -15,7 +15,8 @@ use wassette::LifecycleManager;
 #[instrument(skip(lifecycle_manager))]
 pub(crate) async fn get_component_tools(lifecycle_manager: &LifecycleManager) -> Result<Vec<Tool>> {
     debug!("Listing components");
-    let component_ids = lifecycle_manager.list_components().await;
+    // Use known components (loaded or present on disk) for fast listing
+    let component_ids = lifecycle_manager.list_components_known().await;
 
     info!(count = component_ids.len(), "Found components");
     let mut tools = Vec::new();
@@ -139,7 +140,8 @@ pub async fn handle_list_components(
 ) -> Result<CallToolResult> {
     info!("Listing loaded components");
 
-    let component_ids = lifecycle_manager.list_components().await;
+    // Use known components (loaded or present on disk) for fast listing
+    let component_ids = lifecycle_manager.list_components_known().await;
 
     let components_info = stream::iter(component_ids)
         .map(|id| async move {

@@ -251,6 +251,10 @@ async fn handle_tool_cli_command(
 }
 
 /// Create LifecycleManager from plugin directory
+///
+/// For CLI responsiveness, we create an unloaded lifecycle manager which
+/// initializes engine/linker without compiling/scanning all components.
+/// Component metadata or lazy loads are used by individual handlers.
 async fn create_lifecycle_manager(plugin_dir: Option<PathBuf>) -> Result<LifecycleManager> {
     let config = if let Some(dir) = plugin_dir {
         config::Config {
@@ -271,7 +275,8 @@ async fn create_lifecycle_manager(plugin_dir: Option<PathBuf>) -> Result<Lifecyc
         .context("Failed to load configuration")?
     };
 
-    LifecycleManager::new_with_config(
+    // Use unloaded manager for fast CLI startup, but preserve custom secrets dir
+    LifecycleManager::new_unloaded_with_config(
         &config.plugin_dir,
         config.environment_vars,
         &config.secrets_dir,
@@ -572,7 +577,8 @@ async fn main() -> Result<()> {
             }
             Commands::Component { command } => match command {
                 ComponentCommands::Load { path, plugin_dir } => {
-                    let lifecycle_manager = create_lifecycle_manager(plugin_dir.clone()).await?;
+                    let plugin_dir = plugin_dir.clone().or_else(|| cli.plugin_dir.clone());
+                    let lifecycle_manager = create_lifecycle_manager(plugin_dir).await?;
                     let mut args = Map::new();
                     args.insert("path".to_string(), json!(path));
                     handle_tool_cli_command(
@@ -584,7 +590,8 @@ async fn main() -> Result<()> {
                     .await?;
                 }
                 ComponentCommands::Unload { id, plugin_dir } => {
-                    let lifecycle_manager = create_lifecycle_manager(plugin_dir.clone()).await?;
+                    let plugin_dir = plugin_dir.clone().or_else(|| cli.plugin_dir.clone());
+                    let lifecycle_manager = create_lifecycle_manager(plugin_dir).await?;
                     let mut args = Map::new();
                     args.insert("id".to_string(), json!(id));
                     handle_tool_cli_command(
@@ -599,7 +606,8 @@ async fn main() -> Result<()> {
                     plugin_dir,
                     output_format,
                 } => {
-                    let lifecycle_manager = create_lifecycle_manager(plugin_dir.clone()).await?;
+                    let plugin_dir = plugin_dir.clone().or_else(|| cli.plugin_dir.clone());
+                    let lifecycle_manager = create_lifecycle_manager(plugin_dir).await?;
                     let args = Map::new();
                     handle_tool_cli_command(
                         &lifecycle_manager,
@@ -616,7 +624,8 @@ async fn main() -> Result<()> {
                     plugin_dir,
                     output_format,
                 } => {
-                    let lifecycle_manager = create_lifecycle_manager(plugin_dir.clone()).await?;
+                    let plugin_dir = plugin_dir.clone().or_else(|| cli.plugin_dir.clone());
+                    let lifecycle_manager = create_lifecycle_manager(plugin_dir).await?;
                     let mut args = Map::new();
                     args.insert("component_id".to_string(), json!(component_id));
                     handle_tool_cli_command(&lifecycle_manager, "get-policy", args, *output_format)
@@ -631,8 +640,8 @@ async fn main() -> Result<()> {
                         access,
                         plugin_dir,
                     } => {
-                        let lifecycle_manager =
-                            create_lifecycle_manager(plugin_dir.clone()).await?;
+                        let plugin_dir = plugin_dir.clone().or_else(|| cli.plugin_dir.clone());
+                        let lifecycle_manager = create_lifecycle_manager(plugin_dir).await?;
                         let mut args = Map::new();
                         args.insert("component_id".to_string(), json!(component_id));
                         args.insert(
@@ -655,8 +664,8 @@ async fn main() -> Result<()> {
                         host,
                         plugin_dir,
                     } => {
-                        let lifecycle_manager =
-                            create_lifecycle_manager(plugin_dir.clone()).await?;
+                        let plugin_dir = plugin_dir.clone().or_else(|| cli.plugin_dir.clone());
+                        let lifecycle_manager = create_lifecycle_manager(plugin_dir).await?;
                         let mut args = Map::new();
                         args.insert("component_id".to_string(), json!(component_id));
                         args.insert(
@@ -678,8 +687,8 @@ async fn main() -> Result<()> {
                         key,
                         plugin_dir,
                     } => {
-                        let lifecycle_manager =
-                            create_lifecycle_manager(plugin_dir.clone()).await?;
+                        let plugin_dir = plugin_dir.clone().or_else(|| cli.plugin_dir.clone());
+                        let lifecycle_manager = create_lifecycle_manager(plugin_dir).await?;
                         let mut args = Map::new();
                         args.insert("component_id".to_string(), json!(component_id));
                         args.insert(
@@ -701,8 +710,8 @@ async fn main() -> Result<()> {
                         limit,
                         plugin_dir,
                     } => {
-                        let lifecycle_manager =
-                            create_lifecycle_manager(plugin_dir.clone()).await?;
+                        let plugin_dir = plugin_dir.clone().or_else(|| cli.plugin_dir.clone());
+                        let lifecycle_manager = create_lifecycle_manager(plugin_dir).await?;
                         let mut args = Map::new();
                         args.insert("component_id".to_string(), json!(component_id));
                         args.insert(
@@ -730,8 +739,8 @@ async fn main() -> Result<()> {
                         uri,
                         plugin_dir,
                     } => {
-                        let lifecycle_manager =
-                            create_lifecycle_manager(plugin_dir.clone()).await?;
+                        let plugin_dir = plugin_dir.clone().or_else(|| cli.plugin_dir.clone());
+                        let lifecycle_manager = create_lifecycle_manager(plugin_dir).await?;
                         let mut args = Map::new();
                         args.insert("component_id".to_string(), json!(component_id));
                         args.insert(
@@ -753,8 +762,8 @@ async fn main() -> Result<()> {
                         host,
                         plugin_dir,
                     } => {
-                        let lifecycle_manager =
-                            create_lifecycle_manager(plugin_dir.clone()).await?;
+                        let plugin_dir = plugin_dir.clone().or_else(|| cli.plugin_dir.clone());
+                        let lifecycle_manager = create_lifecycle_manager(plugin_dir).await?;
                         let mut args = Map::new();
                         args.insert("component_id".to_string(), json!(component_id));
                         args.insert(
@@ -776,8 +785,8 @@ async fn main() -> Result<()> {
                         key,
                         plugin_dir,
                     } => {
-                        let lifecycle_manager =
-                            create_lifecycle_manager(plugin_dir.clone()).await?;
+                        let plugin_dir = plugin_dir.clone().or_else(|| cli.plugin_dir.clone());
+                        let lifecycle_manager = create_lifecycle_manager(plugin_dir).await?;
                         let mut args = Map::new();
                         args.insert("component_id".to_string(), json!(component_id));
                         args.insert(
@@ -799,7 +808,8 @@ async fn main() -> Result<()> {
                     component_id,
                     plugin_dir,
                 } => {
-                    let lifecycle_manager = create_lifecycle_manager(plugin_dir.clone()).await?;
+                    let plugin_dir = plugin_dir.clone().or_else(|| cli.plugin_dir.clone());
+                    let lifecycle_manager = create_lifecycle_manager(plugin_dir).await?;
                     let mut args = Map::new();
                     args.insert("component_id".to_string(), json!(component_id));
                     handle_tool_cli_command(
