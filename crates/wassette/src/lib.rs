@@ -30,6 +30,7 @@ use wasmtime_wasi_config::WasiConfig;
 
 mod http;
 mod loader;
+pub mod oci_multi_layer;
 mod policy_internal;
 mod secrets;
 mod wasistate;
@@ -47,6 +48,10 @@ pub use wasistate::{
 const DOWNLOADS_DIR: &str = "downloads";
 const PRECOMPILED_EXT: &str = "cwasm";
 const METADATA_EXT: &str = "metadata.json";
+
+// Default timeout configurations
+const DEFAULT_OCI_TIMEOUT_SECS: u64 = 30;
+const DEFAULT_HTTP_TIMEOUT_SECS: u64 = 30;
 
 /// Get the default secrets directory path based on the OS
 fn get_default_secrets_dir() -> PathBuf {
@@ -200,12 +205,34 @@ impl LifecycleManager {
         // Use default secrets directory for backward compatibility
         let default_secrets_dir = get_default_secrets_dir();
 
+        // Create an OCI client with configurable timeout to prevent hanging
+        let oci_timeout = std::env::var("OCI_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(DEFAULT_OCI_TIMEOUT_SECS);
+
+        let oci_client = oci_client::Client::new(oci_client::client::ClientConfig {
+            read_timeout: Some(std::time::Duration::from_secs(oci_timeout)),
+            ..Default::default()
+        });
+
+        // Create HTTP client with configurable timeout
+        let http_timeout = std::env::var("HTTP_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(DEFAULT_HTTP_TIMEOUT_SECS);
+
+        let http_client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(http_timeout))
+            .build()
+            .context("Failed to create HTTP client")?;
+
         Self::new_with_config(
             plugin_dir,
             HashMap::new(), // Empty environment variables for backward compatibility
             default_secrets_dir,
-            oci_client::Client::default(),
-            reqwest::Client::default(),
+            oci_client,
+            http_client,
         )
         .await
     }
@@ -332,12 +359,34 @@ impl LifecycleManager {
         // Use default secrets directory
         let default_secrets_dir = get_default_secrets_dir();
 
+        // Create an OCI client with configurable timeout to prevent hanging
+        let oci_timeout = std::env::var("OCI_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(DEFAULT_OCI_TIMEOUT_SECS);
+
+        let oci_client = oci_client::Client::new(oci_client::client::ClientConfig {
+            read_timeout: Some(std::time::Duration::from_secs(oci_timeout)),
+            ..Default::default()
+        });
+
+        // Create HTTP client with configurable timeout
+        let http_timeout = std::env::var("HTTP_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(DEFAULT_HTTP_TIMEOUT_SECS);
+
+        let http_client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(http_timeout))
+            .build()
+            .context("Failed to create HTTP client")?;
+
         Self::new_with_config(
             plugin_dir,
             environment_vars,
             default_secrets_dir,
-            oci_client::Client::default(),
-            reqwest::Client::default(),
+            oci_client,
+            http_client,
         )
         .await
     }
@@ -559,6 +608,48 @@ impl LifecycleManager {
             )
             .map(|_| LoadResult::Replaced)
             .unwrap_or(LoadResult::New);
+
+        // Check for co-located policy file and automatically attach it
+        // This matches the behavior at startup (see line 232)
+        let policy_path = self.plugin_dir.join(format!("{}.policy.yaml", &id));
+        if policy_path.exists() {
+            debug!(
+                "Found co-located policy file for component {}, attaching automatically",
+                id
+            );
+            match tokio::fs::read_to_string(&policy_path).await {
+                Ok(policy_content) => {
+                    match PolicyParser::parse_str(&policy_content) {
+                        Ok(policy) => {
+                            match wasistate::create_wasi_state_template_from_policy(
+                                &policy,
+                                &self.plugin_dir,
+                                &self.environment_vars,
+                                None, // No secrets during load_component
+                            ) {
+                                Ok(wasi_state) => {
+                                    self.policy_registry
+                                        .write()
+                                        .await
+                                        .component_policies
+                                        .insert(id.clone(), Arc::new(wasi_state));
+                                    info!("Automatically attached policy to component {}", id);
+                                }
+                                Err(e) => {
+                                    warn!("Failed to create WASI state from policy for component {}: {}", id, e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to parse policy file for component {}: {}", id, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to read policy file for component {}: {}", id, e);
+                }
+            }
+        }
 
         info!("Successfully loaded component");
         Ok((id, res))
