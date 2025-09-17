@@ -839,6 +839,21 @@ impl LifecycleManager {
         self.registry.read().await.list_tools()
     }
 
+    /// Returns the schema for a specific tool owned by a component, if available
+    #[instrument(skip(self))]
+    pub async fn get_tool_schema_for_component(
+        &self,
+        component_id: &str,
+        tool_name: &str,
+    ) -> Option<Value> {
+        let registry = self.registry.read().await;
+        let tool_infos = registry.get_tool_info(tool_name)?;
+        tool_infos
+            .iter()
+            .find(|info| info.component_id == component_id)
+            .map(|info| info.schema.clone())
+    }
+
     /// Returns the requested component. Returns `None` if the component is not found.
     #[instrument(skip(self))]
     pub async fn get_component(&self, component_id: &str) -> Option<ComponentInstance> {
