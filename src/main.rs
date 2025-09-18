@@ -496,7 +496,9 @@ async fn main() -> Result<()> {
                 let config =
                     config::Config::from_serve(cfg).context("Failed to load configuration")?;
 
-                let lifecycle_manager = LifecycleManager::new_with_config(
+                // Build the lifecycle manager without eagerly loading components so the
+                // background loader is the single source of tool registration.
+                let lifecycle_manager = LifecycleManager::new_unloaded_with_config(
                     &config.plugin_dir,
                     config.environment_vars,
                     &config.secrets_dir,

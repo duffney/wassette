@@ -1434,6 +1434,15 @@ impl LifecycleManager {
                 if Self::validate_stamp(&entry_path, &metadata.validation_stamp).await {
                     // Register tools from cached metadata
                     let mut registry_write = self.registry.write().await;
+
+                    // If the component is already registered (e.g. from an eager load), skip to
+                    // avoid duplicate tool registrations that would break lookups. This can
+                    // happen when the loaded constructors are combined with the background loader.
+                    if registry_write.component_map.contains_key(component_id) {
+                        debug!(component_id = %component_id, "Skipping cached metadata; component already registered");
+                        continue;
+                    }
+
                     let tool_metadata: Vec<ToolMetadata> = metadata
                         .function_identifiers
                         .into_iter()

@@ -8,7 +8,7 @@ use anyhow::Result;
 use futures::stream::{self, StreamExt};
 use rmcp::model::{CallToolRequestParam, CallToolResult, Content, Tool};
 use rmcp::{Peer, RoleServer};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use tracing::{debug, error, info, instrument};
 use wassette::LifecycleManager;
 
@@ -124,19 +124,32 @@ pub(crate) async fn handle_component_call(
         Ok(result_str) => {
             debug!("Component call successful");
 
-            if tool_schema
+            if let Some(raw_schema) = tool_schema
                 .as_ref()
                 .and_then(|schema| schema.get("outputSchema"))
-                .is_some()
             {
-                let structured_value = parse_structured_result(&result_str);
-                let contents = vec![Content::text(result_str)];
+                if let Some(normalized_schema) = normalize_output_schema(raw_schema) {
+                    let structured_value = parse_structured_result(&result_str);
+                    let structured_value = align_structured_result_with_schema(
+                        Some(&normalized_schema),
+                        structured_value,
+                    );
+                    let contents = vec![Content::text(result_str)];
 
-                Ok(CallToolResult {
-                    content: Some(contents),
-                    structured_content: Some(structured_value),
-                    is_error: Some(false),
-                })
+                    Ok(CallToolResult {
+                        content: Some(contents),
+                        structured_content: Some(structured_value),
+                        is_error: Some(false),
+                    })
+                } else {
+                    let contents = vec![Content::text(result_str)];
+
+                    Ok(CallToolResult {
+                        content: Some(contents),
+                        structured_content: None,
+                        is_error: Some(false),
+                    })
+                }
             } else {
                 let contents = vec![Content::text(result_str)];
 
@@ -156,6 +169,69 @@ pub(crate) async fn handle_component_call(
 
 fn parse_structured_result(result: &str) -> Value {
     serde_json::from_str(result).unwrap_or_else(|_| Value::String(result.to_string()))
+}
+
+fn align_structured_result_with_schema(
+    output_schema: Option<&Value>,
+    structured_value: Value,
+) -> Value {
+    if let Some(schema) = output_schema {
+        if schema.get("type").and_then(|v| v.as_str()) == Some("object") {
+            if let Some(properties) = schema.get("properties").and_then(|v| v.as_object()) {
+                if properties.contains_key("result") {
+                    return match structured_value {
+                        Value::Object(obj) => {
+                            if obj.contains_key("result") {
+                                Value::Object(obj)
+                            } else {
+                                let mut wrapper = Map::new();
+                                wrapper.insert("result".to_string(), Value::Object(obj));
+                                Value::Object(wrapper)
+                            }
+                        }
+                        other => {
+                            let mut wrapper = Map::new();
+                            wrapper.insert("result".to_string(), other);
+                            Value::Object(wrapper)
+                        }
+                    };
+                }
+            }
+        }
+    }
+
+    structured_value
+}
+
+fn normalize_output_schema(schema: &Value) -> Option<Value> {
+    if schema.is_null() {
+        return None;
+    }
+
+    match schema {
+        Value::Object(map) => {
+            if map.get("type").and_then(|v| v.as_str()) == Some("object") {
+                Some(Value::Object(map.clone()))
+            } else {
+                Some(wrap_schema_in_result(schema.clone()))
+            }
+        }
+        _ => Some(wrap_schema_in_result(schema.clone())),
+    }
+}
+
+fn wrap_schema_in_result(schema: Value) -> Value {
+    let mut props = Map::new();
+    props.insert("result".to_string(), schema);
+
+    let mut wrapped = Map::new();
+    wrapped.insert("type".to_string(), Value::String("object".to_string()));
+    wrapped.insert("properties".to_string(), Value::Object(props));
+    wrapped.insert(
+        "required".to_string(),
+        Value::Array(vec![Value::String("result".to_string())]),
+    );
+    Value::Object(wrapped)
 }
 
 #[instrument(skip(lifecycle_manager))]
@@ -362,38 +438,13 @@ pub(crate) fn parse_tool_schema(tool_json: &Value) -> Option<Tool> {
     // MCP Inspector requires outputSchema.type to be "object" if provided.
     // To ensure compatibility, wrap any non-object output schema into an
     // object schema under a "result" property.
-    let output_schema = tool_json.get("outputSchema");
-
-    let output_schema_arc = if let Some(schema) = output_schema {
-        if schema.is_null() {
-            None
-        } else {
-            match schema {
-                // If it's an object and already declares type: object, keep as is
-                Value::Object(map)
-                    if map.get("type").and_then(|v| v.as_str()) == Some("object") =>
-                {
-                    Some(Arc::new(map.clone()))
-                }
-                // Otherwise, wrap the original schema inside an object
-                _ => {
-                    let mut props = serde_json::Map::new();
-                    props.insert("result".to_string(), schema.clone());
-
-                    let mut wrapped = serde_json::Map::new();
-                    wrapped.insert("type".to_string(), Value::String("object".to_string()));
-                    wrapped.insert("properties".to_string(), Value::Object(props));
-                    wrapped.insert(
-                        "required".to_string(),
-                        Value::Array(vec![Value::String("result".to_string())]),
-                    );
-                    Some(Arc::new(wrapped))
-                }
-            }
-        }
-    } else {
-        None
-    };
+    let output_schema_arc = tool_json
+        .get("outputSchema")
+        .and_then(normalize_output_schema)
+        .and_then(|normalized| match normalized {
+            Value::Object(map) => Some(Arc::new(map)),
+            _ => None,
+        });
 
     debug!(
         tool_name = %name,
@@ -495,6 +546,55 @@ mod tests {
     fn test_parse_structured_result_with_text() {
         let parsed = parse_structured_result("plain text");
         assert_eq!(parsed, json!("plain text"));
+    }
+
+    #[test]
+    fn test_normalize_output_schema_wraps_scalar() {
+        let inner = json!({"type": "string"});
+        let normalized = normalize_output_schema(&inner).unwrap();
+        assert_eq!(
+            normalized,
+            json!({
+                "type": "object",
+                "properties": {"result": inner},
+                "required": ["result"]
+            })
+        );
+    }
+
+    #[test]
+    fn test_normalize_output_schema_handles_null() {
+        assert!(normalize_output_schema(&Value::Null).is_none());
+    }
+
+    #[test]
+    fn test_align_structured_result_with_schema_wraps_missing_result() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "result": {"type": "string"}
+            },
+            "required": ["result"]
+        });
+
+        let aligned =
+            align_structured_result_with_schema(Some(&schema), Value::String("hello".into()));
+        assert_eq!(aligned, json!({"result": "hello"}));
+    }
+
+    #[test]
+    fn test_align_structured_result_with_schema_respects_existing_result() {
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "result": {"type": "string"}
+            },
+            "required": ["result"]
+        });
+
+        let original = json!({"result": {"ok": "16"}});
+        let aligned = align_structured_result_with_schema(Some(&schema), original.clone());
+        assert_eq!(aligned, original);
     }
 
     #[test]
