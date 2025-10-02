@@ -1,0 +1,7 @@
+version: "1.0"
+description: "Permission policy for wassette weather demo"
+permissions:
+  network:
+    allow:
+      - host: "geocoding-api.open-meteo.com"
+      - host: "api.open-meteo.com"
