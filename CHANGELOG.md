@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Comprehensive installation guide page consolidating all installation methods (one-liner script, Homebrew, Nix, WinGet) organized by platform (Linux, macOS, Windows) with verification steps and troubleshooting sections
 - Cookbook section in documentation with language-specific guides for building Wasm components in JavaScript/TypeScript, Python, Rust, and Go ([#328](https://github.com/microsoft/wassette/pull/328))
 - Multi-version documentation support with version dropdown, hosting at `/wassette/latest/` (main) and `/wassette/vX.Y/` (tags)
 - Automated release preparation and package manifest update workflows to eliminate manual version bump PRs ([#320](https://github.com/microsoft/wassette/pull/320))
@@ -13,6 +14,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Reorganized documentation structure by moving CLI reference to a new `reference` section in the mdBook for better organization
+- Updated README.md to reference the new dedicated installation guide for complete installation instructions
+- Removed separate homebrew.md, nix.md, and winget.md pages to eliminate duplication; all installation content is now consolidated in installation.md
+- Added tabbed interface for installation instructions organized by platform (Linux, macOS, Windows, Nix) using mdbook-tabs preprocessor
 
 ### Fixed
 

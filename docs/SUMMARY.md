@@ -1,9 +1,7 @@
 # Summary
 
 - [Overview](./overview.md)
-- [Homebrew](./homebrew.md)
-- [Nix](./nix.md)
-- [Winget](./winget.md)
+- [Installation](./installation.md)
 - [MCP Clients](./mcp-clients.md)
 - [FAQ](./faq.md)
 

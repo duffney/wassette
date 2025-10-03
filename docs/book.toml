@@ -8,6 +8,8 @@ title = "Wassette Documentation"
 [build]
 build-dir = "book"
 
+[preprocessor.tabs]
+
 [output.html]
 additional-js = ["mermaid.min.js", "mermaid-init.js", "theme/version-picker.js"]
 additional-css = ["theme/version-picker.css"]
