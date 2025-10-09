@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added `$schema` field to all policy YAML files referencing the policy-mcp schema for better IDE support and validation
 - Documentation for GitHub Agentic Workflows explaining how the repository uses @githubnext/gh-aw for automated issue triage and research tasks
 - Comprehensive documentation in RELEASE.md for releasing example component images to GHCR, including automatic publishing workflow, manual release process, and instructions for adding new examples
+- GitHub Actions workflow `.github/workflows/copilot-setup-steps.yml` that provides reusable setup steps for GitHub Copilot coding agents to prepare a complete development environment with Rust, just, protobuf, wasm-tools, and other essential tools
 
 ### Changed
 
