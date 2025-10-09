@@ -26,3 +26,4 @@
 - [Architecture](./design/architecture.md)
 - [Permission System](./design/permission-system.md)
 - [Component Schemas & Structured Output](./design/component2json-structured-output.md)
+- [Agentic Workflows](./design/agentic-workflows.md)
