@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json
 
 PackageIdentifier: Microsoft.Wassette
-PackageVersion: 0.3.0
+PackageVersion: 0.3.5
 PackageLocale: en-US
 Publisher: Microsoft Corporation
 PublisherUrl: https://github.com/microsoft/wassette
@@ -29,20 +29,20 @@ Tags:
 - sandbox
 - runtime
 - component
-ReleaseDate: 2025-10-03
+ReleaseDate: 2025-10-20
 Installers:
 - Architecture: x64
   InstallerType: zip
-  InstallerUrl: https://github.com/microsoft/wassette/releases/download/v0.3.0/wassette_0.3.0_windows_amd64.zip
-  InstallerSha256: fa92161cf0bf1644f368ab4f87bdcd4483079d679ed7baeebfbbeb5a0e43df9a 
+  InstallerUrl: https://github.com/duffney/wassette/releases/download/v0.3.5/wassette_0.3.5_windows_amd64.zip
+  InstallerSha256: 9f1a320038963e77cf5e8788c3022a96d935c70af4553384eda5642ac328d1e2
   NestedInstallerType: portable
   NestedInstallerFiles:
   - RelativeFilePath: wassette.exe
     PortableCommandAlias: wassette
 - Architecture: arm64
   InstallerType: zip
-  InstallerUrl: https://github.com/microsoft/wassette/releases/download/v0.3.0/wassette_0.3.0_windows_arm64.zip
-  InstallerSha256: 8e8be37fa39abf2a90b80debda24013dff2e443a2b90b8db26f530e369468b6d
+  InstallerUrl: https://github.com/duffney/wassette/releases/download/v0.3.5/wassette_0.3.5_windows_arm64.zip
+  InstallerSha256: 0291938f3ce317d246b8f2f061ee62b66a1c582659677c953704ed7336f65cfc
   NestedInstallerType: portable
   NestedInstallerFiles:
   - RelativeFilePath: wassette.exe

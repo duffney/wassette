@@ -3,25 +3,25 @@ class Wassette < Formula
   homepage "https://github.com/microsoft/wassette"
   # Change this to install a different version of wassette.
   # The release tag in GitHub must exist with a 'v' prefix (e.g., v0.1.0).
-  version "0.3.0"
+  version "0.3.5"
 
   on_macos do
     if Hardware::CPU.intel?
       url "https://github.com/microsoft/wassette/releases/download/v#{version}/wassette_#{version}_darwin_amd64.tar.gz"
-      sha256 "2800d0ea1f722fb6814caed07f7b93ab1fa637f75b3a096d8b482158c8c2eb98"
+      sha256 "3a87b68cac4a16451174ef83cef8d5cb67616329ea5ee7cd7223f6feab99c28e"
     else
       url "https://github.com/microsoft/wassette/releases/download/v#{version}/wassette_#{version}_darwin_arm64.tar.gz"
-      sha256 "394ede6bd2ad8420e59d4cd88e6a6c0299e6b7997b044599282f0d6941c5d575"
+      sha256 "75fe8f078d821a7f6c5b827ac58e6a868dad0d930a9cd6e63e09a573d34eca69"
     end
   end
 
   on_linux do
     if Hardware::CPU.intel?
       url "https://github.com/microsoft/wassette/releases/download/v#{version}/wassette_#{version}_linux_amd64.tar.gz"
-      sha256 "7510424ce5ef7db02ae8e02d8dbf49ce1a723cec61451201d3107a405f56d6c9"
+      sha256 "bcf5fd6fe15baa91a8c492e599ad055aeb794119621edfac3966e20f8ae8b2b4"
     else
       url "https://github.com/microsoft/wassette/releases/download/v#{version}/wassette_#{version}_linux_arm64.tar.gz"
-      sha256 "fa92161cf0bf1644f368ab4f87bdcd4483079d679ed7baeebfbbeb5a0e43df9a"
+      sha256 "99cb68a2f21f481d7cc2d77234edf008f22f071fea1069cbeec37f2b98ddcbb7"
     end
   end
 
